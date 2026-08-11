@@ -16,11 +16,13 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE TABLE IF NOT EXISTS price_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id TEXT NOT NULL,
-    recorded_at TEXT NOT NULL,              -- ISO timestamp when statistics were fetched
-    avg_price_48h REAL,
-    volume_48h INTEGER,
-    avg_price_90d REAL,
-    volume_90d INTEGER,
+    recorded_at TEXT NOT NULL,              -- ISO timestamp from the statistic entry
+    avg_price REAL,
+    median_price REAL,
+    volume INTEGER,
+    moving_avg REAL,
+    stat_window TEXT NOT NULL,              -- '90day' or '48hr'
+    UNIQUE(item_id, recorded_at, stat_window),
     FOREIGN KEY(item_id) REFERENCES items(item_id)
 );
 

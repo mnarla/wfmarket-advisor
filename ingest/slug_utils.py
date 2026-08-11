@@ -65,3 +65,14 @@ def parse_slug(url_slug: str, tags: list = None) -> tuple:
             return frame_name, part
             
     return frame_name, 'set' if 'set' in rest else 'blueprint'
+
+
+def parse_item(item: dict) -> tuple:
+    """
+    Convenience wrapper around parse_slug accepting an item dictionary from WFM API v2.
+    Expects keys 'slug' (or 'url_slug') and 'tags'.
+    """
+    slug = item.get("slug") or item.get("url_slug") or ""
+    tags = item.get("tags") or []
+    return parse_slug(slug, tags)
+
