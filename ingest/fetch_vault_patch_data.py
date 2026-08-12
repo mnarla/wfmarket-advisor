@@ -2,11 +2,13 @@ import sqlite3
 import json
 import logging
 import requests
-from typing import Dict, Any
+from datetime import datetime, timezone
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
 WARFRAMES_JSON_URL = "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Warframes.json"
+PATCHLOGS_JSON_URL = "https://raw.githubusercontent.com/WFCD/warframe-patchlogs/master/data/patchlogs.json"
 DB_PATH = "db/wfm.db"
 WATCHLIST_PATH = "config/watchlist.json"
 
@@ -18,7 +20,6 @@ def fetch_warframe_vault_patch_data() -> Dict[str, Any]:
       - vaulted: bool
       - vaultDate: str | None
       - estimatedVaultDate: str | None
-      - patchlogs: list[dict]
     """
     logger.info(f"Fetching WFCD Warframes dataset from {WARFRAMES_JSON_URL}...")
     response = requests.get(WARFRAMES_JSON_URL, timeout=30)
@@ -34,32 +35,59 @@ def fetch_warframe_vault_patch_data() -> Dict[str, Any]:
             "vaulted": entry.get("vaulted", False),
             "vaultDate": entry.get("vaultDate"),
             "estimatedVaultDate": entry.get("estimatedVaultDate"),
-            "patchlogs": entry.get("patchlogs", []),
         }
 
     logger.info(f"Loaded {len(data)} Warframe entries from WFCD dataset.")
     return data
 
 
+def fetch_live_patchlogs() -> List[Dict[str, Any]]:
+    """
+    GETs the raw patchlogs.json URL from @wfcd/patchlogs repo.
+    Returns the full list of raw patchlogs.
+    """
+    logger.info(f"Fetching live patchlogs from {PATCHLOGS_JSON_URL}...")
+    response = requests.get(PATCHLOGS_JSON_URL, timeout=30)
+    response.raise_for_status()
+    raw_patchlogs = response.json()
+    logger.info(f"Loaded {len(raw_patchlogs)} total patchlogs from live source.")
+    return raw_patchlogs
+
+
+def match_patchlogs_to_frame(all_patchlogs: List[Dict[str, Any]], frame_name: str) -> List[Dict[str, Any]]:
+    """
+    Filters all patchlogs to entries where frame_name (or its base name without 'Prime')
+    appears in name/additions/changes/fixes.
+    """
+    matched = []
+    base_name = frame_name.replace(" Prime", "").strip()
+    base_lower = base_name.lower()
+    frame_lower = frame_name.lower()
+
+    for p in all_patchlogs:
+        name_txt = p.get("name") or ""
+        add_txt = p.get("additions") or ""
+        chg_txt = p.get("changes") or ""
+        fix_txt = p.get("fixes") or ""
+
+        combined_txt = f"{name_txt}\n{add_txt}\n{chg_txt}\n{fix_txt}".lower()
+        if frame_lower in combined_txt or base_lower in combined_txt:
+            matched.append(p)
+
+    return matched
+
+
 def update_items_vault_status(conn: sqlite3.Connection, watchlist: list, source_data: Dict[str, Any]) -> int:
     """
     For each frame in the watchlist, looks up its vault info in source_data and
     UPDATEs all 5 component rows in `items` WHERE frame_name = ?.
-
-    Converts the source JSON boolean `vaulted` field to the schema's TEXT enum:
-      True  -> 'vaulted'
-      False -> 'unvaulted'
-
-    Returns the total number of item rows updated.
     """
     cursor = conn.cursor()
     total_updated = 0
-    failed = []
 
     for frame_name in watchlist:
         if frame_name not in source_data:
-            logger.warning(f"Frame '{frame_name}' not found in WFCD dataset — skipping vault update.")
-            failed.append(frame_name)
+            logger.warning(f"Frame '{frame_name}' not found in WFCD dataset — skipping vault status update.")
             continue
 
         info = source_data[frame_name]
@@ -75,23 +103,16 @@ def update_items_vault_status(conn: sqlite3.Connection, watchlist: list, source_
             """,
             (vault_status, vault_date, estimated_vault_date, frame_name),
         )
-        rows_updated = cursor.rowcount
-        total_updated += rows_updated
-
-        if rows_updated == 0:
-            logger.warning(f"No rows updated for frame '{frame_name}' — frame_name may not match items table.")
+        total_updated += cursor.rowcount
 
     conn.commit()
     return total_updated
 
 
-def insert_patchlogs(conn: sqlite3.Connection, watchlist: list, source_data: Dict[str, Any]) -> tuple:
+def insert_patchlogs(conn: sqlite3.Connection, watchlist: list, all_patchlogs: List[Dict[str, Any]]) -> int:
     """
-    For each frame in the watchlist, inserts patchlog entries into the `patchlogs` table.
-    De-duplicates in Python by checking existing (frame_name, patch_name) pairs before
-    inserting, since the patchlogs table has no UNIQUE constraint.
-
-    Returns (rows_inserted, failed_frames).
+    Filters and inserts matched patchlogs for each frame on the watchlist.
+    De-duplicates by checking (frame_name, patch_name) pairs.
     """
     cursor = conn.cursor()
 
@@ -100,16 +121,12 @@ def insert_patchlogs(conn: sqlite3.Connection, watchlist: list, source_data: Dic
     existing = set(cursor.fetchall())
 
     total_inserted = 0
-    failed = []
 
     for frame_name in watchlist:
-        if frame_name not in source_data:
-            failed.append(frame_name)
-            continue
+        matched_logs = match_patchlogs_to_frame(all_patchlogs, frame_name)
+        logger.info(f"Matched {len(matched_logs)} patchlogs for frame '{frame_name}'")
 
-        patchlogs = source_data[frame_name].get("patchlogs", [])
-
-        for patch in patchlogs:
+        for patch in matched_logs:
             patch_name = patch.get("name", "")
             patch_date = patch.get("date", "")
 
@@ -117,7 +134,7 @@ def insert_patchlogs(conn: sqlite3.Connection, watchlist: list, source_data: Dic
                 continue
 
             if (frame_name, patch_name) in existing:
-                continue  # skip duplicate
+                continue
 
             cursor.execute(
                 """
@@ -138,33 +155,31 @@ def insert_patchlogs(conn: sqlite3.Connection, watchlist: list, source_data: Dic
             total_inserted += 1
 
     conn.commit()
-    return total_inserted, failed
+    return total_inserted
 
 
 def main():
     """
-    Orchestrates: connect to db/wfm.db, load watchlist, fetch WFCD data,
-    run vault status update and patchlog insertion, print summary.
+    Orchestrates the ingestion pipeline.
     """
     with open(WATCHLIST_PATH) as f:
         watchlist = json.load(f)
 
-    source_data = fetch_warframe_vault_patch_data()
+    # 1. Fetch source data
+    vault_data = fetch_warframe_vault_patch_data()
+    live_patchlogs = fetch_live_patchlogs()
 
+    # 2. Update DB
     conn = sqlite3.connect(DB_PATH)
     try:
-        items_updated = update_items_vault_status(conn, watchlist, source_data)
-        patchlogs_inserted, failed = insert_patchlogs(conn, watchlist, source_data)
+        items_updated = update_items_vault_status(conn, watchlist, vault_data)
+        patchlogs_inserted = insert_patchlogs(conn, watchlist, live_patchlogs)
     finally:
         conn.close()
 
-    print(f"\n=== Vault & Patch Ingestion Summary ===")
+    print(f"\n=== Vault & Live Patch Ingestion Summary ===")
     print(f"  Items rows updated (vault status): {items_updated}")
     print(f"  Patchlog rows inserted:            {patchlogs_inserted}")
-    if failed:
-        print(f"  Frames NOT found in WFCD dataset ({len(failed)}): {failed}")
-    else:
-        print(f"  All watchlist frames matched successfully.")
 
 
 if __name__ == "__main__":
