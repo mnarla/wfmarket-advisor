@@ -114,13 +114,12 @@ Respond with ONLY valid JSON (no markdown fences, no explanation outside the JSO
 
 def _call_fallback_llm(prompt: str) -> Optional[str]:
     """
-    Fallback LLM caller using raw requests to OpenRouter or OpenAI,
+    Fallback LLM caller using raw requests to OpenRouter,
     avoiding any extra package dependencies.
     """
     import requests
     
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
 
     # 1. Try OpenRouter
     if openrouter_key and openrouter_key != "your_openrouter_api_key_here":
@@ -143,26 +142,6 @@ def _call_fallback_llm(prompt: str) -> Optional[str]:
             return res.json()["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"OpenRouter fallback failed: {e}")
-
-    # 2. Try OpenAI
-    if openai_key and openai_key != "your_openai_api_key_here":
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {openai_key}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": "gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.0
-        }
-        try:
-            logger.info("Attempting LLM call via OpenAI fallback...")
-            res = requests.post(url, json=data, headers=headers, timeout=20)
-            res.raise_for_status()
-            return res.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            logger.warning(f"OpenAI fallback failed: {e}")
 
     return None
 
@@ -251,7 +230,20 @@ def compute_patch_signal(frame_name: str, conn: sqlite3.Connection) -> Dict[str,
     3. call_llm_for_patch_analysis — get structured judgment
     Returns the full signal dict.
     """
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM patchlogs WHERE frame_name = ?", (frame_name,))
+    total_in_db = cur.fetchone()[0]
+
     patchlogs = get_recent_patchlogs(frame_name, conn)
+
+    print(f"\n[DEBUG] Frame: {frame_name}")
+    print(f"[DEBUG] Total patchlogs in DB: {total_in_db}")
+    print(f"[DEBUG] Patchlogs within 90-day window: {len(patchlogs)}")
+    if patchlogs:
+        for p in patchlogs:
+            print(f"  - Included patch: '{p.get('patch_name')}' | Date: {p.get('patch_date')}")
+    else:
+        print("  - No patches within 90-day window.")
 
     if not patchlogs:
         return {
@@ -260,11 +252,13 @@ def compute_patch_signal(frame_name: str, conn: sqlite3.Connection) -> Dict[str,
             "expected_impact": "none",
             "reasoning": f"No patchlog entries found for {frame_name} in the last {PATCHLOG_LOOKBACK_DAYS} days.",
             "patchlogs_checked": 0,
+            "total_patchlogs_in_db": total_in_db,
         }
 
     prompt = build_patch_context_prompt(frame_name, patchlogs)
     result = call_llm_for_patch_analysis(prompt)
     result["patchlogs_checked"] = len(patchlogs)
+    result["total_patchlogs_in_db"] = total_in_db
 
     return result
 
