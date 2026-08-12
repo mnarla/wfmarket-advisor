@@ -170,7 +170,7 @@ def call_llm_for_patch_analysis(prompt: str) -> Dict[str, Any]:
         try:
             client = genai.Client(api_key=api_key)
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-flash-latest",
                 contents=prompt,
             )
             raw_text = response.text.strip()
