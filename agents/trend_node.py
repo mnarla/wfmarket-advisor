@@ -79,7 +79,9 @@ def compute_trend_signal(item_id: str, conn: sqlite3.Connection) -> Dict[str, An
             "r_squared": None,
             "confidence": "low",
             "current_price": None,
+            "mean_price": None,
             "pct_change_90d": None,
+            "low_price_item": False,
             "reasoning": f"Insufficient price history ({len(rows)} data points) to compute trend.",
         }
 
@@ -93,7 +95,9 @@ def compute_trend_signal(item_id: str, conn: sqlite3.Connection) -> Dict[str, An
             "r_squared": None,
             "confidence": "low",
             "current_price": None,
+            "mean_price": None,
             "pct_change_90d": None,
+            "low_price_item": False,
             "reasoning": f"Failed to parse timestamps: {e}",
         }
 
@@ -106,8 +110,18 @@ def compute_trend_signal(item_id: str, conn: sqlite3.Connection) -> Dict[str, An
     r_squared = result.rvalue ** 2
 
     current_price = float(prices[-1])
+    mean_price = float(np.mean(prices))
+    low_price_item = mean_price < 2.0
     n_days = day_offsets[-1] - day_offsets[0]
-    pct_change_90d = (slope * n_days / current_price * 100) if current_price else 0.0
+
+    # Compute percentage change directly from actual observed start/end prices (averaged over up to 3 points)
+    k = min(3, len(prices))
+    start_price = float(np.mean(prices[:k]))
+    end_price = float(np.mean(prices[-k:]))
+    if start_price > 0:
+        pct_change_90d = ((end_price - start_price) / start_price) * 100
+    else:
+        pct_change_90d = 0.0
 
     # Confidence
     confidence = "high" if (len(rows) >= MIN_DATA_POINTS and r_squared >= R2_CONFIDENCE_THRESHOLD) else "low"
@@ -141,7 +155,9 @@ def compute_trend_signal(item_id: str, conn: sqlite3.Connection) -> Dict[str, An
         "r_squared": round(r_squared, 4),
         "confidence": confidence,
         "current_price": current_price,
+        "mean_price": round(mean_price, 2),
         "pct_change_90d": round(pct_change_90d, 2),
+        "low_price_item": low_price_item,
         "reasoning": reasoning,
     }
 
@@ -160,7 +176,9 @@ def trend_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 "r_squared": None,
                 "confidence": "low",
                 "current_price": None,
+                "mean_price": None,
                 "pct_change_90d": None,
+                "low_price_item": False,
                 "reasoning": "No item_id in state.",
             }
         }
