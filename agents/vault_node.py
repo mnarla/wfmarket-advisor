@@ -51,12 +51,12 @@ def compute_vault_signal(vault_status: str, vault_date: str | None, estimated_va
         - days_until_vault: int | None
         - reasoning: str — human-readable fragment for synthesis node
     """
-    now = datetime.now(tz=timezone.utc)
+    now_date = datetime.now(tz=timezone.utc).date()
 
     if vault_status == "vaulted":
         parsed_vault_date = _parse_date(vault_date)
         if parsed_vault_date:
-            days_since = (now - parsed_vault_date).days
+            days_since = (now_date - parsed_vault_date.date()).days
             if days_since <= RECENTLY_VAULTED_THRESHOLD_DAYS:
                 signal = "recently_vaulted"
                 reasoning = (
@@ -87,15 +87,26 @@ def compute_vault_signal(vault_status: str, vault_date: str | None, estimated_va
     else:  # vault_status == 'unvaulted'
         parsed_est = _parse_date(estimated_vault_date)
         if parsed_est:
-            days_until = (parsed_est - now).days
-            if days_until <= VAULTING_SOON_THRESHOLD_DAYS:
+            days_until = (parsed_est.date() - now_date).days
+            if 0 <= days_until <= VAULTING_SOON_THRESHOLD_DAYS:
+                days_str = f"in ~{days_until} days" if days_until > 0 else "today"
                 return {
                     "signal": "vaulting_soon",
                     "days_since_vaulted": None,
                     "days_until_vault": days_until,
                     "reasoning": (
-                        f"Estimated to vault in ~{days_until} days ({estimated_vault_date}) — "
+                        f"Estimated to vault {days_str} ({estimated_vault_date}) — "
                         f"watch for price movement as relics become unavailable."
+                    ),
+                }
+            elif days_until < 0 and abs(days_until) <= VAULTING_SOON_THRESHOLD_DAYS:
+                return {
+                    "signal": "vaulting_soon",
+                    "days_since_vaulted": None,
+                    "days_until_vault": days_until,
+                    "reasoning": (
+                        f"Estimated vault date ({estimated_vault_date}) passed ~{abs(days_until)} days ago — "
+                        f"vaulting expected imminently."
                     ),
                 }
         # No estimated date, or far-off estimate (> VAULTING_SOON_THRESHOLD_DAYS)
