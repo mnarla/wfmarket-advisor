@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS recommendations (
     item_id TEXT NOT NULL,
     generated_at TEXT NOT NULL,             -- ISO timestamp
     recommendation TEXT NOT NULL,           -- 'SELL', 'HOLD'
+    confidence TEXT,                        -- 'low', 'medium', 'high'
+    primary_driver TEXT,                    -- 'trend', 'vault', 'patch', 'combined'
     trend_signal REAL,                      -- Numeric signal from trend node
     vault_signal TEXT,                      -- Signal from vault node
     patch_signal TEXT,                      -- Signal/analysis from patch node
