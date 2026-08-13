@@ -133,7 +133,8 @@ def _call_fallback_llm(prompt: str) -> Optional[str]:
         data = {
             "model": "google/gemini-2.5-flash",
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.0
+            "temperature": 0.0,
+            "max_tokens": 1000
         }
         try:
             logger.info("Attempting LLM call via OpenRouter fallback...")
