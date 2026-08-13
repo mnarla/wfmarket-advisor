@@ -27,7 +27,7 @@ from typing import Dict, Any
 DB_PATH = "db/wfm.db"
 
 # Tunable thresholds
-SLOPE_THRESHOLD_PCT_PER_WEEK = 0.5   # % of current price per week to be classified rising/falling
+PCT_CHANGE_THRESHOLD = 10.0           # % change over 90 days for classification (rising/falling)
 MIN_DATA_POINTS = 10                  # Fewer than this -> low_confidence regardless of R²
 R2_CONFIDENCE_THRESHOLD = 0.25       # R² below this -> low_confidence
 
@@ -126,17 +126,14 @@ def compute_trend_signal(item_id: str, conn: sqlite3.Connection) -> Dict[str, An
     # Confidence
     confidence = "high" if (len(rows) >= MIN_DATA_POINTS and r_squared >= R2_CONFIDENCE_THRESHOLD) else "low"
 
-    # Classification: compare weekly slope to SLOPE_THRESHOLD_PCT_PER_WEEK of current price
-    slope_per_week = slope * 7
-    price_threshold = current_price * (SLOPE_THRESHOLD_PCT_PER_WEEK / 100)
-
-    if slope_per_week > price_threshold:
+    # Classification: based on the scale-independent pct_change_90d
+    if pct_change_90d > PCT_CHANGE_THRESHOLD:
         signal = "rising"
         reasoning = (
             f"Price rose ~{pct_change_90d:.1f}% over the last {int(n_days)} days "
             f"(slope={slope:.3f} pt/day, R²={r_squared:.2f}, {confidence} confidence)."
         )
-    elif slope_per_week < -price_threshold:
+    elif pct_change_90d < -PCT_CHANGE_THRESHOLD:
         signal = "falling"
         reasoning = (
             f"Price fell ~{abs(pct_change_90d):.1f}% over the last {int(n_days)} days "
