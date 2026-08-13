@@ -103,10 +103,10 @@ def _call_fallback_llm(prompt: str) -> Optional[str]:
             "X-Title": "WFM Sell-Timing Advisor",
         }
         data = {
-            "model": "google/gemma-4-26b-a4b-it:free",
+            "model": "openai/gpt-oss-20b:free",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.0,
-            "max_tokens": 500,
+            "max_tokens": 1000,
         }
         try:
             logger.info("Attempting LLM call via OpenRouter fallback...")
