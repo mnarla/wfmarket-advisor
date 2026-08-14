@@ -123,16 +123,30 @@ def compute_vault_signal(vault_status: str, vault_date: str | None, estimated_va
 
 def vault_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    LangGraph node: reads vault info from state['vault_info'] and produces a vault_signal.
-
-    vault_info dict is expected to carry:
-        vault_status: str — 'vaulted' or 'unvaulted'
-        vault_date: str | None
-        estimated_vault_date: str | None
+    LangGraph node: reads vault info from state['vault_info'] (or fetches from DB via item_id)
+    and produces a vault_signal.
 
     Updates state with vault_signal dict containing signal, days, and reasoning.
     """
-    vault_info = state.get("vault_info", {})
+    vault_info = state.get("vault_info")
+    item_id = state.get("item_id")
+
+    if not vault_info and item_id:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT vault_status, vault_date, estimated_vault_date FROM items WHERE item_id = ?",
+            (item_id,),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            vault_info = dict(row)
+
+    if not vault_info:
+        vault_info = {}
+
     vault_status = vault_info.get("vault_status", "unvaulted")
     vault_date = vault_info.get("vault_date")
     estimated_vault_date = vault_info.get("estimated_vault_date")

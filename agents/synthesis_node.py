@@ -90,8 +90,11 @@ Respond with ONLY valid JSON (no markdown fences, no text outside the JSON):
 def _call_fallback_llm(prompt: str) -> Optional[str]:
     """
     Fallback LLM caller using raw requests to OpenRouter,
-    matching patch_node.py's implementation.
+    matching patch_node.py's implementation. Retries on 429 rate limits.
     """
+    import time
+    import requests
+
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
     if openrouter_key and openrouter_key != "your_openrouter_api_key_here":
@@ -108,13 +111,18 @@ def _call_fallback_llm(prompt: str) -> Optional[str]:
             "temperature": 0.0,
             "max_tokens": 1000,
         }
-        try:
-            logger.info("Attempting LLM call via OpenRouter fallback...")
-            res = requests.post(url, json=data, headers=headers, timeout=20)
-            res.raise_for_status()
-            return res.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            logger.warning(f"OpenRouter fallback failed: {e}")
+        for attempt in range(2):
+            try:
+                logger.info("Attempting LLM call via OpenRouter fallback...")
+                res = requests.post(url, json=data, headers=headers, timeout=20)
+                if res.status_code == 429 and attempt == 0:
+                    logger.warning("OpenRouter returned 429 rate limit. Waiting 5s before retry...")
+                    time.sleep(5.0)
+                    continue
+                res.raise_for_status()
+                return res.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                logger.warning(f"OpenRouter fallback failed: {e}")
 
     return None
 
@@ -278,7 +286,21 @@ def synthesis_node(state: AgentState) -> AgentState:
     and returns updated AgentState.
     """
     item_id = state.get("item_id", "")
-    item_name = state.get("item_name") or state.get("url_slug", "Unknown Item")
+    item_name = state.get("item_name")
+    
+    if not item_name and item_id:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT item_name FROM items WHERE item_id = ?", (item_id,))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            item_name = row["item_name"]
+            
+    if not item_name:
+        item_name = state.get("url_slug", "Unknown Item")
+
     trend_signal = state.get("trend_signal", {})
     vault_signal = state.get("vault_signal", {})
     patch_signal = state.get("patch_signal", {})

@@ -115,20 +115,20 @@ Respond with ONLY valid JSON (no markdown fences, no explanation outside the JSO
 def _call_fallback_llm(prompt: str) -> Optional[str]:
     """
     Fallback LLM caller using raw requests to OpenRouter,
-    avoiding any extra package dependencies.
+    avoiding any extra package dependencies. Retries on 429 rate limits.
     """
+    import time
     import requests
-    
+
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
-    # 1. Try OpenRouter
     if openrouter_key and openrouter_key != "your_openrouter_api_key_here":
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {openrouter_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/mnarla/wfmarket-scout",
-            "X-Title": "WFM Sell-Timing Advisor"
+            "X-Title": "WFM Sell-Timing Advisor",
         }
         data = {
             "model": "openai/gpt-oss-20b:free",
@@ -136,13 +136,18 @@ def _call_fallback_llm(prompt: str) -> Optional[str]:
             "temperature": 0.0,
             "max_tokens": 1000,
         }
-        try:
-            logger.info("Attempting LLM call via OpenRouter fallback...")
-            res = requests.post(url, json=data, headers=headers, timeout=20)
-            res.raise_for_status()
-            return res.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            logger.warning(f"OpenRouter fallback failed: {e}")
+        for attempt in range(2):
+            try:
+                logger.info("Attempting LLM call via OpenRouter fallback...")
+                res = requests.post(url, json=data, headers=headers, timeout=20)
+                if res.status_code == 429 and attempt == 0:
+                    logger.warning("OpenRouter returned 429 rate limit. Waiting 5s before retry...")
+                    time.sleep(5.0)
+                    continue
+                res.raise_for_status()
+                return res.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                logger.warning(f"OpenRouter fallback failed: {e}")
 
     return None
 
@@ -266,10 +271,22 @@ def compute_patch_signal(frame_name: str, conn: sqlite3.Connection) -> Dict[str,
 
 def patch_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    LangGraph node: reads frame_name from state, analyzes recent patchlogs via LLM,
-    and writes the patch_signal back to state.
+    LangGraph node: reads frame_name from state (or fetches from DB via item_id),
+    analyzes recent patchlogs via LLM, and writes the patch_signal back to state.
     """
     frame_name = state.get("frame_name")
+    item_id = state.get("item_id")
+
+    if not frame_name and item_id:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT frame_name FROM items WHERE item_id = ?", (item_id,))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            frame_name = row["frame_name"]
+
     if not frame_name:
         return {
             "patch_signal": {
