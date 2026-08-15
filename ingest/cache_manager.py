@@ -377,6 +377,101 @@ def ensure_fresh_data(slugs: List[str], db_path: str = DB_PATH) -> None:
         conn.close()
 
 
+def format_signal_summary(
+    trend_signal: Optional[Dict[str, Any]],
+    vault_signal: Optional[Dict[str, Any]],
+    patch_signal: Optional[Dict[str, Any]],
+) -> Dict[str, str]:
+    """
+    Builds a clean, concise bulleted summary of the inputs.
+    """
+    t_sig = trend_signal or {}
+    v_sig = vault_signal or {}
+    p_sig = patch_signal or {}
+
+    # 1. Trend Summary
+    pct = t_sig.get("pct_change_90d")
+    r2 = t_sig.get("r_squared")
+    if pct is not None:
+        sign = "+" if pct > 0 else ""
+        r2_str = f" (R² = {r2:.2f})" if r2 is not None else ""
+        trend_summary = f"{sign}{pct:.1f}%{r2_str}"
+    else:
+        trend_summary = "Insufficient Data"
+
+    # 2. Vault Summary
+    v_state = v_sig.get("signal", "unknown")
+    days_until = v_sig.get("days_until_vault")
+    days_since = v_sig.get("days_since_vaulted")
+    if v_sig.get("is_resurgence_active"):
+        vault_summary = f"Resurgence Active ({days_until}d remaining)"
+    elif v_state == "recently_vaulted":
+        vault_summary = f"Recently Vaulted ({days_since}d ago)"
+    elif v_state == "long_vaulted":
+        vault_summary = f"Long Vaulted ({days_since}d ago)"
+    elif v_state == "vaulting_soon":
+        vault_summary = f"Vaulting Soon (~{days_until}d to vault)"
+    elif v_state == "not_vaulted":
+        vault_summary = f"Active ({days_until}d to vault)" if days_until else "Active (Unvaulted)"
+    else:
+        vault_summary = "Unknown"
+
+    # 3. Patch Summary
+    impact = p_sig.get("expected_impact", "none").capitalize()
+    p_name = p_sig.get("patch_name")
+    if p_name and impact != "None":
+        patch_summary = f"{impact} ({p_name})"
+    else:
+        patch_summary = impact
+
+    # 4. Price Summary
+    curr_price = t_sig.get("current_price")
+    mean_price = t_sig.get("mean_price")
+    if curr_price is not None:
+        curr_str = f"{int(curr_price) if curr_price == int(curr_price) else curr_price}p"
+        if mean_price is not None:
+            price_summary = f"{curr_str} (88d Avg: {mean_price:.1f}p)"
+        else:
+            price_summary = curr_str
+    else:
+        price_summary = "N/A"
+
+    return {
+        "price": price_summary,
+        "trend": trend_summary,
+        "vault": vault_summary,
+        "patch": patch_summary,
+    }
+
+
+def format_recommendation_card(rec: Dict[str, Any]) -> str:
+    """
+    Formats a single recommendation dictionary into a clean, scannable terminal card.
+    """
+    item_name = rec.get("item_name", "Item")
+    slug = rec.get("slug", "")
+    sig_sum = rec.get("signal_summary") or format_signal_summary(
+        rec.get("trend_signal"), rec.get("vault_signal"), rec.get("patch_signal")
+    )
+
+    lines = [
+        "=" * 80,
+        f"ITEM: {item_name} ({slug})",
+        f"CURRENT PRICE: {sig_sum.get('price', 'N/A')}",
+        "-" * 80,
+        "SIGNALS:",
+        f"  • Trend:        {sig_sum.get('trend', 'N/A')}",
+        f"  • Vault Status: {sig_sum.get('vault', 'N/A')}",
+        f"  • Patch Impact: {sig_sum.get('patch', 'N/A')}",
+        f"ACTION: {rec.get('recommendation', 'HOLD')}",
+        "-" * 80,
+        "REASONING:",
+        rec.get("reasoning", ""),
+        "=" * 80,
+    ]
+    return "\n".join(lines)
+
+
 def get_recommendation(user_input: str, db_path: str = DB_PATH) -> Dict[str, Any]:
     """
     Entry point for on-demand query architecture:
@@ -384,7 +479,7 @@ def get_recommendation(user_input: str, db_path: str = DB_PATH) -> Dict[str, Any
       2. If ambiguous or not_found, returns immediately without touching cache or graph
       3. If resolved, calls ensure_fresh_data(slugs)
       4. Invokes the existing LangGraph pipeline per slug
-      5. Returns structured recommendation results
+      5. Returns structured recommendation results with explicit numerical breakdowns
     """
     resolved: ResolvedQuery = resolve_item_query(user_input)
 
@@ -425,18 +520,24 @@ def get_recommendation(user_input: str, db_path: str = DB_PATH) -> Dict[str, Any
             }
 
             final_state = app.invoke(initial_state)
-            slug_results.append(
-                {
-                    "slug": slug,
-                    "item_name": item["item_name"],
-                    "component_type": item["component_type"],
-                    "recommendation": final_state.get("recommendation"),
-                    "reasoning": final_state.get("reasoning"),
-                    "trend_signal": final_state.get("trend_signal"),
-                    "vault_signal": final_state.get("vault_signal"),
-                    "patch_signal": final_state.get("patch_signal"),
-                }
-            )
+            trend_sig = final_state.get("trend_signal") or {}
+            vault_sig = final_state.get("vault_signal") or {}
+            patch_sig = final_state.get("patch_signal") or {}
+            sig_sum = format_signal_summary(trend_sig, vault_sig, patch_sig)
+
+            item_rec = {
+                "slug": slug,
+                "item_name": item["item_name"],
+                "component_type": item["component_type"],
+                "recommendation": final_state.get("recommendation", "HOLD"),
+                "reasoning": final_state.get("reasoning", ""),
+                "trend_signal": trend_sig,
+                "vault_signal": vault_sig,
+                "patch_signal": patch_sig,
+                "signal_summary": sig_sum,
+            }
+            item_rec["formatted_card"] = format_recommendation_card(item_rec)
+            slug_results.append(item_rec)
     finally:
         conn.close()
 
@@ -455,6 +556,8 @@ def get_recommendation(user_input: str, db_path: str = DB_PATH) -> Dict[str, Any
             "trend_signal": single["trend_signal"],
             "vault_signal": single["vault_signal"],
             "patch_signal": single["patch_signal"],
+            "signal_summary": single["signal_summary"],
+            "formatted_card": single["formatted_card"],
             "results": slug_results,
         }
 
@@ -465,4 +568,5 @@ def get_recommendation(user_input: str, db_path: str = DB_PATH) -> Dict[str, Any
         "component": resolved.component,
         "slugs": resolved.slugs,
         "results": slug_results,
+        "formatted_card": "\n\n".join(r["formatted_card"] for r in slug_results),
     }
