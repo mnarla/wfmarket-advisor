@@ -1,10 +1,10 @@
 # WFM Sell-Timing Advisor
 
-An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Market** built using **LangGraph**, **SQLite**, and **Gemini / LLM synthesis**.
+An on-demand sell/hold recommendation pipeline for **Warframe Market** built using **LangGraph**, **SQLite**, and **Gemini / LLM synthesis**.
 
 ---
 
-## 🌟 Key Architecture & Capabilities
+## Architecture & Capabilities
 
 1. **On-Demand Free-Text Query Engine ([`slug_resolver.py`](slug_resolver.py))**:
    - Accepts colloquial item queries (e.g. `"rhino prime"`, `"wisp prime sys"`, `"excal p bp"`).
@@ -30,45 +30,9 @@ An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Mark
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
-### 1. Installation
-```bash
-git clone https://github.com/mnarla/wfmarket-scout.git
-cd wfmarket-scout
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2. Environment Configuration
-Create a `.env` file in the project root:
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-OPENROUTER_API_KEY=your_openrouter_api_key_here  # Optional fallback
-```
-
-### 3. Usage
-
-#### Interactive Query Loop:
-```bash
-python main.py
-```
-
-#### One-Shot Item Query:
-```bash
-python main.py --query "caliban prime neuroptics"
-python main.py --query "rhino prime"
-python main.py --query "wisp prime sys"
-```
-
-#### Full Watchlist Batch Run:
-```bash
-python main.py --batch
-```
-
----
-
+Still developing so I will update soon. 
 ## 🧪 Running Tests
 ```bash
 pytest
