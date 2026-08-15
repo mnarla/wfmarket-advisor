@@ -1,14 +1,16 @@
 import sqlite3
 import json
 import logging
+import re
 import requests
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
 WARFRAMES_JSON_URL = "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Warframes.json"
 PATCHLOGS_JSON_URL = "https://raw.githubusercontent.com/WFCD/warframe-patchlogs/master/data/patchlogs.json"
+VAULT_TRADER_URL = "https://api.warframestat.us/pc/vaultTrader"
 DB_PATH = "db/wfm.db"
 WATCHLIST_PATH = "config/watchlist.json"
 
@@ -39,6 +41,99 @@ def fetch_warframe_vault_patch_data() -> Dict[str, Any]:
 
     logger.info(f"Loaded {len(data)} Warframe entries from WFCD dataset.")
     return data
+
+
+def fetch_prime_resurgence_data() -> Dict[str, Dict[str, Any]]:
+    """
+    GETs live Prime Resurgence data from the Warframe WorldState API (vaultTrader).
+    Returns a dict keyed by frame name (e.g. 'Rhino Prime') with:
+      - is_active: bool (whether currently unvaulted in Varzia's active rotation)
+      - resurgence_end_date: str | None (current rotation expiry ISO timestamp)
+      - last_resurgence_end: str | None (ISO date of most recent ended resurgence)
+      - pack_name: str | None
+    """
+    logger.info(f"Fetching Prime Resurgence data from {VAULT_TRADER_URL}...")
+    try:
+        response = requests.get(
+            VAULT_TRADER_URL,
+            headers={"User-Agent": "wfm-sell-timing-advisor/1.0", "Accept": "application/json"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        logger.warning(f"Failed to fetch Prime Resurgence data from {VAULT_TRADER_URL}: {e}")
+        return {}
+
+    now = datetime.now(tz=timezone.utc)
+    active_inventory = [item.get("item", "") for item in data.get("inventory", [])]
+    current_expiry = data.get("expiry")
+    schedule = data.get("schedule", [])
+
+    resurgence_map: Dict[str, Dict[str, Any]] = {}
+
+    # Helper to check if a frame is in active inventory
+    def is_in_active_inventory(frame_name: str) -> bool:
+        base = frame_name.replace(" Prime", "").lower()
+        return any(base in inv.lower() for inv in active_inventory)
+
+    # Process schedule history for all past rotations
+    for entry in schedule:
+        item_str = entry.get("item", "")
+        expiry_str = entry.get("expiry")
+        if not expiry_str:
+            continue
+        try:
+            expiry_dt = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
+        except Exception:
+            continue
+
+        # Extract words that could represent prime frames
+        for word in re.findall(r"[A-Za-z]+", item_str):
+            if word.lower() in (
+                "prime", "m", "p", "v", "dual", "single", "pack", "armor",
+                "set", "weapon", "item", "last", "chance", "a", "b", "c"
+            ):
+                continue
+            frame_candidate = f"{word.capitalize()} Prime"
+
+            if frame_candidate not in resurgence_map or expiry_dt > resurgence_map[frame_candidate]["last_resurgence_end_dt"]:
+                resurgence_map[frame_candidate] = {
+                    "last_resurgence_end_dt": expiry_dt,
+                    "last_resurgence_end": expiry_str[:10],  # YYYY-MM-DD
+                    "pack_name": item_str,
+                }
+
+    # Finalize records with active status and expiry
+    result: Dict[str, Dict[str, Any]] = {}
+    for frame_name, info in resurgence_map.items():
+        is_active = is_in_active_inventory(frame_name)
+        result[frame_name] = {
+            "is_active": is_active,
+            "resurgence_end_date": current_expiry[:10] if (is_active and current_expiry) else None,
+            "last_resurgence_end": info["last_resurgence_end"],
+            "pack_name": info["pack_name"],
+        }
+
+    # Also check if any frame in active inventory wasn't in past schedule history
+    for inv_item in active_inventory:
+        for word in re.findall(r"[A-Za-z]+", inv_item):
+            if word.lower() in ("prime", "m", "p", "v", "dual", "single", "pack", "armor", "set", "weapon", "item"):
+                continue
+            frame_candidate = f"{word.capitalize()} Prime"
+            if frame_candidate not in result:
+                result[frame_candidate] = {
+                    "is_active": True,
+                    "resurgence_end_date": current_expiry[:10] if current_expiry else None,
+                    "last_resurgence_end": None,
+                    "pack_name": inv_item,
+                }
+            else:
+                result[frame_candidate]["is_active"] = True
+                result[frame_candidate]["resurgence_end_date"] = current_expiry[:10] if current_expiry else None
+
+    logger.info(f"Loaded Prime Resurgence data for {len(result)} frames.")
+    return result
 
 
 def fetch_live_patchlogs() -> List[Dict[str, Any]]:
@@ -77,13 +172,19 @@ def match_patchlogs_to_frame(all_patchlogs: List[Dict[str, Any]], frame_name: st
     return matched
 
 
-def update_items_vault_status(conn: sqlite3.Connection, watchlist: list, source_data: Dict[str, Any]) -> int:
+def update_items_vault_status(
+    conn: sqlite3.Connection,
+    watchlist: list,
+    source_data: Dict[str, Any],
+    resurgence_data: Optional[Dict[str, Any]] = None,
+) -> int:
     """
     For each frame in the watchlist, looks up its vault info in source_data and
-    UPDATEs all 5 component rows in `items` WHERE frame_name = ?.
+    Prime Resurgence info, and UPDATEs component rows in `items` WHERE frame_name = ?.
     """
     cursor = conn.cursor()
     total_updated = 0
+    resurgence_map = resurgence_data or {}
 
     for frame_name in watchlist:
         if frame_name not in source_data:
@@ -91,17 +192,41 @@ def update_items_vault_status(conn: sqlite3.Connection, watchlist: list, source_
             continue
 
         info = source_data[frame_name]
-        vault_status = "vaulted" if info["vaulted"] else "unvaulted"
+        resurg_info = resurgence_map.get(frame_name, {})
+
+        is_active = resurg_info.get("is_active", False)
+        resurg_end = resurg_info.get("resurgence_end_date")
+        last_resurg_end = resurg_info.get("last_resurgence_end")
+
+        if is_active:
+            vault_status = "unvaulted"
+            estimated_vault_date = resurg_end or info["estimatedVaultDate"]
+        else:
+            vault_status = "vaulted" if info["vaulted"] else "unvaulted"
+            estimated_vault_date = info["estimatedVaultDate"]
+
         vault_date = info["vaultDate"]
-        estimated_vault_date = info["estimatedVaultDate"]
 
         cursor.execute(
             """
             UPDATE items
-            SET vault_status = ?, vault_date = ?, estimated_vault_date = ?
+            SET vault_status = ?,
+                vault_date = ?,
+                estimated_vault_date = ?,
+                last_resurgence_end = ?,
+                is_resurgence_active = ?,
+                resurgence_end_date = ?
             WHERE frame_name = ?
             """,
-            (vault_status, vault_date, estimated_vault_date, frame_name),
+            (
+                vault_status,
+                vault_date,
+                estimated_vault_date,
+                last_resurg_end,
+                1 if is_active else 0,
+                resurg_end,
+                frame_name,
+            ),
         )
         total_updated += cursor.rowcount
 
@@ -167,19 +292,20 @@ def main():
 
     # 1. Fetch source data
     vault_data = fetch_warframe_vault_patch_data()
+    resurgence_data = fetch_prime_resurgence_data()
     live_patchlogs = fetch_live_patchlogs()
 
     # 2. Update DB
     conn = sqlite3.connect(DB_PATH)
     try:
-        items_updated = update_items_vault_status(conn, watchlist, vault_data)
+        items_updated = update_items_vault_status(conn, watchlist, vault_data, resurgence_data)
         patchlogs_inserted = insert_patchlogs(conn, watchlist, live_patchlogs)
     finally:
         conn.close()
 
-    print(f"\n=== Vault & Live Patch Ingestion Summary ===")
-    print(f"  Items rows updated (vault status): {items_updated}")
-    print(f"  Patchlog rows inserted:            {patchlogs_inserted}")
+    print(f"\n=== Vault, Prime Resurgence & Live Patch Ingestion Summary ===")
+    print(f"  Items rows updated (vault & resurgence status): {items_updated}")
+    print(f"  Patchlog rows inserted:                         {patchlogs_inserted}")
 
 
 if __name__ == "__main__":

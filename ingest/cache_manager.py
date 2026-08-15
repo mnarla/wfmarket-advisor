@@ -232,26 +232,53 @@ def _refresh_price_for_slug(slug: str, item_id: str, conn: sqlite3.Connection) -
 
 def _refresh_vault_for_frame(frame_name: str, frame_slugs: List[str], conn: sqlite3.Connection) -> bool:
     """
-    Fetches live vault status for a frame and updates all associated items in SQLite.
+    Fetches live vault status and Prime Resurgence data for a frame and updates SQLite.
     Returns True on success, False on failure.
     """
     try:
+        from ingest.fetch_vault_patch_data import fetch_prime_resurgence_data
+
         vault_data = fetch_warframe_vault_patch_data()
+        resurgence_data = fetch_prime_resurgence_data()
         cursor = conn.cursor()
 
         if frame_name in vault_data:
             info = vault_data[frame_name]
-            vault_status = "vaulted" if info.get("vaulted") else "unvaulted"
+            resurg_info = resurgence_data.get(frame_name, {})
+
+            is_active = resurg_info.get("is_active", False)
+            resurg_end = resurg_info.get("resurgence_end_date")
+            last_resurg_end = resurg_info.get("last_resurgence_end")
+
+            if is_active:
+                vault_status = "unvaulted"
+                estimated_vault_date = resurg_end or info.get("estimatedVaultDate")
+            else:
+                vault_status = "vaulted" if info.get("vaulted") else "unvaulted"
+                estimated_vault_date = info.get("estimatedVaultDate")
+
             vault_date = info.get("vaultDate")
-            estimated_vault_date = info.get("estimatedVaultDate")
 
             cursor.execute(
                 """
                 UPDATE items
-                SET vault_status = ?, vault_date = ?, estimated_vault_date = ?
+                SET vault_status = ?,
+                    vault_date = ?,
+                    estimated_vault_date = ?,
+                    last_resurgence_end = ?,
+                    is_resurgence_active = ?,
+                    resurgence_end_date = ?
                 WHERE frame_name = ?
                 """,
-                (vault_status, vault_date, estimated_vault_date, frame_name),
+                (
+                    vault_status,
+                    vault_date,
+                    estimated_vault_date,
+                    last_resurg_end,
+                    1 if is_active else 0,
+                    resurg_end,
+                    frame_name,
+                ),
             )
             conn.commit()
 

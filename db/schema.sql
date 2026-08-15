@@ -8,8 +8,11 @@ CREATE TABLE IF NOT EXISTS items (
     frame_name TEXT NOT NULL,               -- The Warframe this belongs to (e.g. Saryn Prime)
     component_type TEXT NOT NULL,           -- 'set', 'blueprint', 'neuroptics', 'chassis', 'systems'
     vault_status TEXT DEFAULT 'unvaulted',  -- 'vaulted', 'unvaulted'
-    vault_date TEXT,                       -- ISO date string when vaulted
-    estimated_vault_date TEXT               -- ISO date string of estimated vaulting
+    vault_date TEXT,                       -- ISO date string when originally vaulted
+    estimated_vault_date TEXT,             -- ISO date string of estimated vaulting
+    last_resurgence_end TEXT,              -- ISO date string when latest Prime Resurgence ended
+    is_resurgence_active INTEGER DEFAULT 0,-- 1 if currently in Prime Resurgence rotation, 0 otherwise
+    resurgence_end_date TEXT               -- ISO date string when current Prime Resurgence rotation ends
 );
 
 -- Table for historical price & volume statistics (48hr and 90day intervals)
@@ -51,4 +54,12 @@ CREATE TABLE IF NOT EXISTS recommendations (
     patch_signal TEXT,                      -- Signal/analysis from patch node
     reasoning TEXT NOT NULL,                -- Plain-English synthesis explanation
     FOREIGN KEY(item_id) REFERENCES items(item_id)
+);
+
+-- Table for tracking cache freshness per data type for on-demand query architecture
+CREATE TABLE IF NOT EXISTS cache_metadata (
+    slug TEXT PRIMARY KEY,
+    price_last_updated TIMESTAMP,
+    vault_last_updated TIMESTAMP,
+    patch_last_updated TIMESTAMP
 );
