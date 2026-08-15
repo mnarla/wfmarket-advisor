@@ -33,7 +33,4 @@ An on-demand sell/hold recommendation pipeline for **Warframe Market** built usi
 ## Quickstart
 
 Still developing so I will update soon. 
-## 🧪 Running Tests
-```bash
-pytest
-```
+
