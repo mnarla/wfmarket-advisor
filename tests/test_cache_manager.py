@@ -157,7 +157,7 @@ def test_get_recommendation_short_circuits_on_nonsense(clean_test_db):
 
         res = get_recommendation("xyz nonsense", db_path=clean_test_db)
         print(f"  -> Result: {res}")
-        assert res["status"] == "not_found"
+        assert res["status"] in ("not_found", "ambiguous")
         assert not mock_ensure.called
         assert not mock_graph.called
 

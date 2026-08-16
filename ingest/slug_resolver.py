@@ -6,7 +6,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 import httpx
 from rapidfuzz import fuzz, process, utils
 
-from ingest.slug_utils import parse_item
+from ingest.slug_utils import parse_item, parse_slug
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +17,9 @@ WFM_HEADERS = {
     "Language": "en",
 }
 
-COMPONENT_ORDER = ["set", "blueprint", "neuroptics", "chassis", "systems"]
-
+# User-input aliases for component keywords
 COMPONENT_ALIASES: Dict[str, str] = {
+    # Frame components
     "set": "set",
     "bp": "blueprint",
     "blueprint": "blueprint",
@@ -33,6 +33,43 @@ COMPONENT_ALIASES: Dict[str, str] = {
     "systems": "systems",
     "system": "systems",
     "sys": "systems",
+    # Weapon components
+    "barrel": "barrel",
+    "bar": "barrel",
+    "receiver": "receiver",
+    "rec": "receiver",
+    "reciever": "receiver",
+    "stock": "stock",
+    "stk": "stock",
+    "grip": "grip",
+    "string": "string",
+    "str": "string",
+    "upper limb": "upper_limb",
+    "upper_limb": "upper_limb",
+    "upper": "upper_limb",
+    "lower limb": "lower_limb",
+    "lower_limb": "lower_limb",
+    "lower": "lower_limb",
+    "blade": "blade",
+    "bld": "blade",
+    "blades": "blade",
+    "handle": "handle",
+    "hnd": "handle",
+    "disc": "disc",
+    "disk": "disc",
+    "guard": "guard",
+    "hilt": "hilt",
+    "head": "head",
+    "gauntlet": "gauntlet",
+    "link": "link",
+    "pouch": "pouch",
+    "stars": "stars",
+    "star": "stars",
+    "chain": "chain",
+    "carapace": "carapace",
+    "cerebrum": "cerebrum",
+    "ornament": "ornament",
+    "boot": "boot",
 }
 
 TOKEN_EXPANSIONS: Dict[str, str] = {
@@ -72,9 +109,9 @@ _CATALOG_CACHE: Optional[Dict[str, Dict[str, str]]] = None
 def fetch_prime_catalog(timeout: float = 10.0) -> Dict[str, Dict[str, str]]:
     """
     Pulls live WFM v2 items and builds a mapping of:
-    frame_name -> {component_type: slug}
+    item_name -> {component_type: slug}
 
-    Filters to Prime warframe component items only.
+    Filters to Prime warframe and weapon component items only.
     Builds the unique list dynamically from live data.
     """
     global _CATALOG_CACHE
@@ -90,15 +127,17 @@ def fetch_prime_catalog(timeout: float = 10.0) -> Dict[str, Dict[str, str]]:
 
         for item in data:
             tags = item.get("tags", [])
-            if "warframe" not in tags:
+            # Filter for warframe and weapon items
+            if "warframe" not in tags and "weapon" not in tags:
                 continue
-            frame_name, component_type = parse_item(item)
-            if frame_name and component_type:
-                if frame_name not in catalog:
-                    catalog[frame_name] = {}
+
+            item_name, component_type = parse_item(item)
+            if item_name and component_type:
+                if item_name not in catalog:
+                    catalog[item_name] = {}
                 slug = item.get("slug") or item.get("url_slug")
                 if slug:
-                    catalog[frame_name][component_type] = slug
+                    catalog[item_name][component_type] = slug
     except Exception as e:
         logger.warning(f"Failed to fetch live WFM catalog: {e}. Using fallback structure.")
 
@@ -119,7 +158,8 @@ def fetch_prime_catalog(timeout: float = 10.0) -> Dict[str, Dict[str, str]]:
 def extract_component(query: str) -> Tuple[str, Optional[str]]:
     """
     Checks if user input ends with a known component keyword/alias.
-    Handles compound suffixes like 'neuroptics blueprint' / 'chassis bp'.
+    Handles compound multi-word components (e.g. 'upper limb', 'lower limb')
+    and compound blueprint suffixes (e.g. 'systems bp', 'upper limb blueprint').
     Returns (remaining_query_text, component_type_or_None).
     """
     if not query or not query.strip():
@@ -129,13 +169,25 @@ def extract_component(query: str) -> Tuple[str, Optional[str]]:
     if not words:
         return "", None
 
-    # Check for compound component + blueprint suffix (e.g. 'systems bp', 'neuroptics blueprint')
-    if len(words) >= 2 and words[-1] in ("blueprint", "bp"):
-        second_last = words[-2]
-        if second_last in COMPONENT_ALIASES and second_last not in ("bp", "blueprint", "set"):
-            return " ".join(words[:-2]), COMPONENT_ALIASES[second_last]
+    # Check 3-word combinations (e.g. 'upper limb bp', 'lower limb blueprint')
+    if len(words) >= 3 and words[-1] in ("blueprint", "bp"):
+        two_word = f"{words[-3]} {words[-2]}"
+        if two_word in COMPONENT_ALIASES:
+            return " ".join(words[:-3]), COMPONENT_ALIASES[two_word]
 
-    # Check last word
+    # Check 2-word combinations
+    if len(words) >= 2:
+        # e.g. 'systems bp', 'neuroptics blueprint'
+        if words[-1] in ("blueprint", "bp"):
+            second_last = words[-2]
+            if second_last in COMPONENT_ALIASES and second_last not in ("bp", "blueprint", "set"):
+                return " ".join(words[:-2]), COMPONENT_ALIASES[second_last]
+        # e.g. 'upper limb', 'lower limb'
+        two_word = f"{words[-2]} {words[-1]}"
+        if two_word in COMPONENT_ALIASES:
+            return " ".join(words[:-2]), COMPONENT_ALIASES[two_word]
+
+    # Check last word (e.g. 'barrel', 'sys', 'bp', 'receiver')
     last_word = words[-1]
     if last_word in COMPONENT_ALIASES:
         return " ".join(words[:-1]), COMPONENT_ALIASES[last_word]
@@ -146,7 +198,7 @@ def extract_component(query: str) -> Tuple[str, Optional[str]]:
 def normalize_query_for_matching(query: str) -> str:
     """
     Normalizes token abbreviations (e.g. 'p' -> 'prime', 'excal' -> 'excalibur').
-    Appends 'prime' if missing to match against full Prime frame names.
+    Appends 'prime' if missing to match against full Prime names.
     """
     tokens = re.findall(r"[A-Za-z0-9]+", query.lower())
     if not tokens:
@@ -157,37 +209,45 @@ def normalize_query_for_matching(query: str) -> str:
     return " ".join(expanded)
 
 
-def _build_slugs_for_frame(
-    frame_name: str,
+def _build_slugs_for_item(
+    item_name: str,
     component: Optional[str],
     catalog: Dict[str, Dict[str, str]],
 ) -> List[str]:
     """
-    Constructs the list of slugs for a resolved frame and component.
+    Constructs the list of slugs for a resolved item and component.
+    Fetches real component slugs directly from the live catalog.
     """
-    frame_comps = catalog.get(frame_name, {})
-    base_slug = frame_name.lower().replace(" ", "_")
+    item_comps = catalog.get(item_name, {})
+    base_slug = item_name.lower().replace(" ", "_")
 
     if component:
         # Single component requested
-        if component in frame_comps:
-            return [frame_comps[component]]
+        if component in item_comps:
+            return [item_comps[component]]
+        # Fallback if component is blade/blades alias
+        if component == "blade" and "blades" in item_comps:
+            return [item_comps["blades"]]
         # Fallback slug synthesis
         if component in ("neuroptics", "chassis", "systems"):
             return [f"{base_slug}_{component}_blueprint"]
         return [f"{base_slug}_{component}"]
 
-    # Whole set requested: return all 5 components in standardized order
-    slugs = []
-    for comp in COMPONENT_ORDER:
-        if comp in frame_comps:
-            slugs.append(frame_comps[comp])
-        else:
-            if comp in ("neuroptics", "chassis", "systems"):
-                slugs.append(f"{base_slug}_{comp}_blueprint")
-            else:
-                slugs.append(f"{base_slug}_{comp}")
-    return slugs
+    # Whole set requested: return all actual components found in catalog
+    if item_comps:
+        # Standardize set ordering: 'set' first, 'blueprint' second (if present), then remaining parts
+        ordered_slugs = []
+        if "set" in item_comps:
+            ordered_slugs.append(item_comps["set"])
+        if "blueprint" in item_comps:
+            ordered_slugs.append(item_comps["blueprint"])
+        for comp, slug in item_comps.items():
+            if comp not in ("set", "blueprint") and slug not in ordered_slugs:
+                ordered_slugs.append(slug)
+        return ordered_slugs
+
+    # Fallback if item has no entries in catalog
+    return [f"{base_slug}_set"]
 
 
 def resolve_item_query(
@@ -209,8 +269,8 @@ def resolve_item_query(
             return ResolvedQuery(status="not_found")
 
         current_catalog = catalog if catalog is not None else fetch_prime_catalog()
-        frame_names = list(current_catalog.keys())
-        if not frame_names:
+        item_names = list(current_catalog.keys())
+        if not item_names:
             return ResolvedQuery(status="not_found")
 
         # 1. Parse component keyword
@@ -223,10 +283,10 @@ def resolve_item_query(
         if not normalized_query:
             return ResolvedQuery(status="not_found", component=component)
 
-        # 3. Fuzzy match against frame name list using rapidfuzz token_sort_ratio
+        # 3. Fuzzy match against item name list using rapidfuzz token_sort_ratio
         results = process.extract(
             normalized_query,
-            frame_names,
+            item_names,
             scorer=fuzz.token_sort_ratio,
             processor=utils.default_process,
             limit=5,
@@ -239,7 +299,7 @@ def resolve_item_query(
 
         # Score >= 85 -> auto-resolve
         if top_score >= 85.0:
-            slugs = _build_slugs_for_frame(top_match, component, current_catalog)
+            slugs = _build_slugs_for_item(top_match, component, current_catalog)
             return ResolvedQuery(
                 status="resolved",
                 frame_name=top_match,

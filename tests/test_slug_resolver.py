@@ -2,6 +2,10 @@ import pytest
 from ingest.slug_resolver import resolve_item_query, ResolvedQuery
 
 
+# ==============================================================================
+# ORIGINAL 9 TEST CASES (Warframe Regression Suite)
+# ==============================================================================
+
 def test_rhino_prime_whole_set():
     result = resolve_item_query("rhino prime")
     print(f"\n[Test] 'rhino prime' -> {result}")
@@ -85,3 +89,94 @@ def test_none_and_malformed_inputs():
         res = resolve_item_query(malformed)
         print(f"\n[Test] Malformed input {malformed!r} -> {res}")
         assert res.status == "not_found"
+
+
+# ==============================================================================
+# NEW WEAPON TEST CASES (Phase 3 Generalized Items)
+# ==============================================================================
+
+def test_rifle_soma_prime_whole_set():
+    result = resolve_item_query("soma prime")
+    print(f"\n[Test] 'soma prime' (rifle whole set) -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Soma Prime"
+    assert result.component is None
+    assert len(result.slugs) == 5
+    assert "soma_prime_set" in result.slugs
+    assert "soma_prime_blueprint" in result.slugs
+    assert "soma_prime_barrel" in result.slugs
+    assert "soma_prime_receiver" in result.slugs
+    assert "soma_prime_stock" in result.slugs
+
+
+def test_rifle_soma_prime_barrel_component():
+    result = resolve_item_query("soma prime barrel")
+    print(f"\n[Test] 'soma prime barrel' -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Soma Prime"
+    assert result.component == "barrel"
+    assert result.slugs == ["soma_prime_barrel"]
+
+
+def test_rifle_soma_prime_bp_alias():
+    result = resolve_item_query("soma p bp")
+    print(f"\n[Test] 'soma p bp' -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Soma Prime"
+    assert result.component == "blueprint"
+    assert result.slugs == ["soma_prime_blueprint"]
+
+
+def test_bow_cernos_prime_whole_set():
+    result = resolve_item_query("cernos prime")
+    print(f"\n[Test] 'cernos prime' (bow whole set) -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Cernos Prime"
+    assert result.component is None
+    assert len(result.slugs) == 6
+    assert "cernos_prime_set" in result.slugs
+    assert "cernos_prime_blueprint" in result.slugs
+    assert "cernos_prime_grip" in result.slugs
+    assert "cernos_prime_string" in result.slugs
+    assert "cernos_prime_upper_limb" in result.slugs
+    assert "cernos_prime_lower_limb" in result.slugs
+
+
+def test_bow_cernos_prime_upper_limb():
+    result = resolve_item_query("cernos prime upper limb")
+    print(f"\n[Test] 'cernos prime upper limb' -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Cernos Prime"
+    assert result.component == "upper_limb"
+    assert result.slugs == ["cernos_prime_upper_limb"]
+
+
+def test_melee_fang_prime_whole_set():
+    result = resolve_item_query("fang prime")
+    print(f"\n[Test] 'fang prime' (melee whole set) -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Fang Prime"
+    assert result.component is None
+    assert len(result.slugs) == 4
+    assert "fang_prime_set" in result.slugs
+    assert "fang_prime_blueprint" in result.slugs
+    assert "fang_prime_blade" in result.slugs
+    assert "fang_prime_handle" in result.slugs
+
+
+def test_melee_fang_prime_blade_component():
+    result = resolve_item_query("fang prime blade")
+    print(f"\n[Test] 'fang prime blade' -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Fang Prime"
+    assert result.component == "blade"
+    assert result.slugs == ["fang_prime_blade"]
+
+
+def test_melee_orthos_prime_handle_component():
+    result = resolve_item_query("orthos prime handle")
+    print(f"\n[Test] 'orthos prime handle' -> {result}")
+    assert result.status == "resolved"
+    assert result.frame_name == "Orthos Prime"
+    assert result.component == "handle"
+    assert result.slugs == ["orthos_prime_handle"]
