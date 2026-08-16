@@ -1,121 +1,75 @@
-# WFM Sell-Timing Advisor 📈⚔️
+# WFM Sell-Timing Advisor
 
-An on-demand sell/hold intelligence engine for **Warframe Market** built using **LangGraph**, **SQLite**, and **Gemini / LLM synthesis**.
-
-Instead of guessing when to sell your vaulted parts or sets, this tool evaluates 90-day price momentum, live Prime Resurgence rotations (Varzia Dax), and patch balance changes to give you clear **SELL**, **HOLD**, or **WAIT** signals with numerical breakdowns and reasoning.
-
-> 🎥 **Note**: Video demo coming soon!
+An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Market** built using **LangGraph**, **SQLite**, and **Gemini / LLM synthesis**.
 
 ---
 
-## What It Does
+## Key Architecture & Capabilities
 
-1. **Colloquial On-Demand Querying**:
-   - Accepts typos, shorthand, and aliases (e.g., `"rhino prime"`, `"wisp prime sys"`, `"soma prime bld"`, `"excal p bp"`).
-   - Dynamically resolves variable component counts for Warframes and Prime weapons (rifles, bows, melee, etc.).
+1. **On-Demand Free-Text Query Engine ([`slug_resolver.py`](slug_resolver.py))**:
+   - Accepts colloquial item queries (e.g. `"rhino prime"`, `"wisp prime sys"`, `"excal p bp"`).
+   - Dynamically parses component aliases (`set`, `bp`/`blueprint`, `neuroptics`/`neuro`, `chassis`/`chass`, `systems`/`sys`).
+   - Uses `RapidFuzz` token sorting with alias normalization against live Warframe Market catalogs.
 
-2. **Smart Caching Layer**:
-   - SQLite cache with independent staleness tracking (price: 24h, vault: 7d, patches: 24h).
-   - Only fetches what is stale or missing on-demand.
+2. **Conditional Cache & Ingestion Layer ([`cache_manager.py`](cache_manager.py))**:
+   - Independent staleness tracking in SQLite:
+     - **Price History**: Stale if $> 24\text{ hours}$
+     - **Vault Status**: Stale if $> 7\text{ days}$
+     - **Patchlogs**: Stale if $> 24\text{ hours}$
+   - Only refetches missing or stale data on-demand, keeping cached entries intact if network/API calls fail.
 
-3. **Prime Resurgence & Vault Tracking**:
-   - Live integration with Warframe WorldState API (`vaultTrader`).
-   - Calculates effective vault dates (`max(original vaultDate, latest resurgence expiry)`) to ensure recently returned items aren't misclassified as long-vaulted.
-   - Resurgence dates automatically propagate to companion Prime weapons via Prime Access grouping.
+3. **Live Prime Resurgence & Vault Tracking ([`ingest/fetch_vault_patch_data.py`](ingest/fetch_vault_patch_data.py))**:
+   - Integrates live Warframe WorldState API (`vaultTrader`) to track active Prime Resurgence rotations (Varzia Dax).
+   - Computes effective vault dates ($\max(\text{Original Vault Date}, \text{Latest Resurgence End Date})$) to prevent mislabeling recently unvaulted frames as long-vaulted.
 
-4. **Multi-Agent LangGraph Pipeline**:
-   - **Trend Node**: Linear regression over 90-day price history with confidence metrics ($R^2$, slope %).
-   - **Vault Node**: Calendar-math reasoning for vault states (`recently_vaulted`, `vaulting_soon`, `long_vaulted`, `not_vaulted`).
-   - **Patch Node**: Semantic LLM filter that weeds out cosmetic/noise patch notes and identifies genuine gameplay buffs/nerfs.
-   - **Synthesis Node**: Evaluates conflicting signals and outputs a high-confidence recommendation card.
-
----
-
-## Sample Output
-
-```text
-================================================================================
-ITEM: Soma Prime Set (soma_prime_set)
-CURRENT PRICE: 59p (88d Avg: 54.1p)
---------------------------------------------------------------------------------
-SIGNALS:
-  • Trend:        +19.5% (R² = 0.66)
-  • Vault Status: Active (Recently Vaulted, 122d ago)
-  • Patch Impact: None
-ACTION: SELL
---------------------------------------------------------------------------------
-REASONING:
-The Soma Prime Set has demonstrated a steady upward price movement over the last
-90 days with high statistical confidence. Combined with stabilized supply after its
-resurgence rotation, this sustained momentum creates an optimal selling window.
-================================================================================
-```
+4. **Multi-Agent LangGraph Pipeline ([`agents/graph.py`](agents/graph.py))**:
+   - **Trend Node ([`agents/trend_node.py`](agents/trend_node.py))**: Linear regression over 90-day price history with scale-independent thresholding ($\pm 10\%$).
+   - **Vault Node ([`agents/vault_node.py`](agents/vault_node.py))**: Calendar-math reasoning for vaulting and resurgence states (`recently_vaulted`, `vaulting_soon`, `long_vaulted`, `not_vaulted`).
+   - **Patch Node ([`agents/patch_node.py`](agents/patch_node.py))**: LLM semantic filter discerning genuine balance changes (buffs/nerfs) from noise/bugfixes.
+   - **Synthesis Node ([`agents/synthesis_node.py`](agents/synthesis_node.py))**: Weighs conflicting signals and outputs final `SELL` / `HOLD` recommendation, confidence, primary driver, and plain-English justification.
 
 ---
 
-## Getting Started / Running Locally
+## Quickstart
 
-### 1. Clone the Repo
+### 1. Installation
 ```bash
 git clone https://github.com/mnarla/wfmarket-scout.git
 cd wfmarket-scout
-```
-
-### 2. Set Up Virtual Environment & Dependencies
-```bash
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Bring Your Own API Keys 🔑
-Create a `.env` file in the root directory:
-```bash
-cp .env.example .env
-```
-
-Add your API keys to `.env`:
+### 2. Environment Configuration
+Create a `.env` file in the project root:
 ```env
-# Required: Google Gemini API Key (for patch reasoning and synthesis)
 GEMINI_API_KEY=your_gemini_api_key_here
-
-# Optional: OpenRouter API Key (automatic fallback if Gemini hits rate limits)
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here  # Optional fallback
 ```
 
-> **Note on API Keys**: You will need to bring your own API keys. You can get a free Gemini API key from [Google AI Studio](https://aistudio.google.com/). OpenRouter is optional and only used as a fallback if Gemini is overloaded.
+### 3. Usage
 
----
-
-## Usage
-
-### Interactive Mode (Default)
-Search for any Prime Warframe or Weapon interactively:
+#### Interactive Query Loop:
 ```bash
 python main.py
 ```
-```text
-Query item > rhino prime
-Query item > soma prime barrel
-Query item > wisp prime sys
+
+#### One-Shot Item Query:
+```bash
+python main.py --query "caliban prime neuroptics"
+python main.py --query "rhino prime"
+python main.py --query "wisp prime sys"
 ```
 
-### One-Shot Query Mode
-Query a specific item directly from the command line:
+#### Full Watchlist Batch Run:
 ```bash
-# Query an entire set (returns breakdown for set + all components)
-python main.py -q "soma prime"
-
-# Query a single component
-python main.py -q "fang prime blade"
-```
-
-### Run Tests
-```bash
-pytest -v
+python main.py --batch
 ```
 
 ---
 
-## License & Disclaimer
-This is an unofficial community project and is not affiliated with or endorsed by Digital Extremes. Warframe and Warframe Market data belong to their respective creators.
+## Running Tests
+```bash
+pytest
+```
