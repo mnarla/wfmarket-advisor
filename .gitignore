@@ -1,7 +1,44 @@
+# Environment & Secrets
 .env
+.env.*
+.env.local
+!.env.example
+
+# SQLite Databases & Local Data
 *.db
+*.db-journal
+*.sqlite
+*.sqlite3
+db/*.db
+db/*.sqlite
+db/*.sqlite3
+
+# Python Bytecode & Environments
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 venv/
+.venv/
+env/
+ENV/
+
+# Testing & Coverage
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & Temporary Files
+*.log
+scratch/
+tmp/
+.temp/
+
+# IDE & OS Artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.gemini/
+
+# Knowledge Graph Artifacts
 graphify-out/

@@ -6,12 +6,12 @@ An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Mark
 
 ## Architecture & Capabilities
 
-1. **On-Demand Free-Text Query Engine ([`slug_resolver.py`](slug_resolver.py))**:
+1. **On-Demand Free-Text Query Engine ([`ingest/slug_resolver.py`](ingest/slug_resolver.py))**:
    - Accepts colloquial item queries (e.g. `"rhino prime"`, `"wisp prime sys"`, `"excal p bp"`).
    - Dynamically parses component aliases (`set`, `bp`/`blueprint`, `neuroptics`/`neuro`, `chassis`/`chass`, `systems`/`sys`).
    - Uses `RapidFuzz` token sorting with alias normalization against live Warframe Market catalogs.
 
-2. **Conditional Cache & Ingestion Layer ([`cache_manager.py`](cache_manager.py))**:
+2. **Conditional Cache & Ingestion Layer ([`ingest/cache_manager.py`](ingest/cache_manager.py))**:
    - Independent staleness tracking in SQLite:
      - **Price History**: Stale if $> 24\text{ hours}$
      - **Vault Status**: Stale if $> 7\text{ days}$
