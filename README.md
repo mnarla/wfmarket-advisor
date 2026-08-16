@@ -4,7 +4,7 @@ An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Mark
 
 ---
 
-## Key Architecture & Capabilities
+## Architecture & Capabilities
 
 1. **On-Demand Free-Text Query Engine ([`slug_resolver.py`](slug_resolver.py))**:
    - Accepts colloquial item queries (e.g. `"rhino prime"`, `"wisp prime sys"`, `"excal p bp"`).
