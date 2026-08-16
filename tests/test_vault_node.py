@@ -52,3 +52,40 @@ def test_long_vaulted_frame():
     assert signal["signal"] == "long_vaulted"
     assert signal["days_since_vaulted"] == 400
     assert "price likely stabilized" in signal["reasoning"]
+
+
+def test_weapon_resurgence_inherited_signal():
+    """Verify that a weapon with inherited resurgence date computes correct recently_vaulted signal."""
+    now = datetime.now(tz=timezone.utc)
+    resurgence_end = (now - timedelta(days=120)).strftime("%Y-%m-%d")
+
+    # Soma Prime inherits Nova Prime's resurgence expiry
+    signal = compute_vault_signal(
+        vault_status="vaulted",
+        vault_date="2016-11-22",
+        estimated_vault_date="2016-11-22",
+        last_resurgence_end=resurgence_end,
+        is_resurgence_active=False,
+    )
+    assert signal["signal"] == "recently_vaulted"
+    assert signal["days_since_vaulted"] == 120
+    assert "Prime Resurgence rotation" in signal["reasoning"]
+
+
+def test_active_resurgence_weapon():
+    """Verify that an actively unvaulted resurgence weapon computes vaulting_soon signal."""
+    now = datetime.now(tz=timezone.utc)
+    resurgence_expiry = (now + timedelta(days=18)).strftime("%Y-%m-%d")
+
+    # Phantasma Prime / Tatsu Prime companion to Revenant Prime
+    signal = compute_vault_signal(
+        vault_status="unvaulted",
+        vault_date="2024-08-21",
+        estimated_vault_date=None,
+        is_resurgence_active=True,
+        resurgence_end_date=resurgence_expiry,
+    )
+    assert signal["signal"] == "vaulting_soon"
+    assert signal["is_resurgence_active"] is True
+    assert signal["days_until_vault"] == 18
+

@@ -239,7 +239,7 @@ def _refresh_vault_for_frame(frame_name: str, frame_slugs: List[str], conn: sqli
         from ingest.fetch_vault_patch_data import fetch_prime_resurgence_data
 
         vault_data = fetch_warframe_vault_patch_data()
-        resurgence_data = fetch_prime_resurgence_data()
+        resurgence_data = fetch_prime_resurgence_data(vault_data)
         cursor = conn.cursor()
 
         if frame_name in vault_data:
