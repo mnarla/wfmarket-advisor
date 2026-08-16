@@ -12,12 +12,7 @@ def test_rhino_prime_whole_set():
     assert result.status == "resolved"
     assert result.frame_name == "Rhino Prime"
     assert result.component is None
-    assert len(result.slugs) == 5
-    assert "rhino_prime_set" in result.slugs
-    assert "rhino_prime_blueprint" in result.slugs
-    assert "rhino_prime_neuroptics_blueprint" in result.slugs
-    assert "rhino_prime_chassis_blueprint" in result.slugs
-    assert "rhino_prime_systems_blueprint" in result.slugs
+    assert result.slugs == ["rhino_prime_set"]
 
 
 def test_rhino_prime_neuroptics():
@@ -53,7 +48,7 @@ def test_rino_prime_typo():
     assert result.status == "resolved"
     assert result.frame_name == "Rhino Prime"
     assert result.component is None
-    assert len(result.slugs) == 5
+    assert result.slugs == ["rhino_prime_set"]
 
 
 def test_xyz_nonsense_item():
@@ -101,12 +96,7 @@ def test_rifle_soma_prime_whole_set():
     assert result.status == "resolved"
     assert result.frame_name == "Soma Prime"
     assert result.component is None
-    assert len(result.slugs) == 5
-    assert "soma_prime_set" in result.slugs
-    assert "soma_prime_blueprint" in result.slugs
-    assert "soma_prime_barrel" in result.slugs
-    assert "soma_prime_receiver" in result.slugs
-    assert "soma_prime_stock" in result.slugs
+    assert result.slugs == ["soma_prime_set"]
 
 
 def test_rifle_soma_prime_barrel_component():
@@ -133,13 +123,7 @@ def test_bow_cernos_prime_whole_set():
     assert result.status == "resolved"
     assert result.frame_name == "Cernos Prime"
     assert result.component is None
-    assert len(result.slugs) == 6
-    assert "cernos_prime_set" in result.slugs
-    assert "cernos_prime_blueprint" in result.slugs
-    assert "cernos_prime_grip" in result.slugs
-    assert "cernos_prime_string" in result.slugs
-    assert "cernos_prime_upper_limb" in result.slugs
-    assert "cernos_prime_lower_limb" in result.slugs
+    assert result.slugs == ["cernos_prime_set"]
 
 
 def test_bow_cernos_prime_upper_limb():
@@ -157,11 +141,7 @@ def test_melee_fang_prime_whole_set():
     assert result.status == "resolved"
     assert result.frame_name == "Fang Prime"
     assert result.component is None
-    assert len(result.slugs) == 4
-    assert "fang_prime_set" in result.slugs
-    assert "fang_prime_blueprint" in result.slugs
-    assert "fang_prime_blade" in result.slugs
-    assert "fang_prime_handle" in result.slugs
+    assert result.slugs == ["fang_prime_set"]
 
 
 def test_melee_fang_prime_blade_component():

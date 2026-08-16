@@ -235,18 +235,12 @@ def _build_slugs_for_item(
             return [f"{base_slug}_{component}_blueprint"]
         return [f"{base_slug}_{component}"]
 
-    # Whole set requested: return all actual components found in catalog
+    # When no specific component is specified (e.g. "gauss prime", "soma prime"),
+    # return the Set item slug directly.
     if item_comps:
-        # Standardize set ordering: 'set' first, 'blueprint' second (if present), then remaining parts
-        ordered_slugs = []
         if "set" in item_comps:
-            ordered_slugs.append(item_comps["set"])
-        if "blueprint" in item_comps:
-            ordered_slugs.append(item_comps["blueprint"])
-        for comp, slug in item_comps.items():
-            if comp not in ("set", "blueprint") and slug not in ordered_slugs:
-                ordered_slugs.append(slug)
-        return ordered_slugs
+            return [item_comps["set"]]
+        return [list(item_comps.values())[0]]
 
     # Fallback if item has no entries in catalog
     return [f"{base_slug}_set"]
