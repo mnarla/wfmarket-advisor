@@ -20,7 +20,7 @@ An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Mark
 
 3. **Live Prime Resurgence & Vault Tracking ([`ingest/fetch_vault_patch_data.py`](ingest/fetch_vault_patch_data.py))**:
    - Integrates live Warframe WorldState API (`vaultTrader`) to track active Prime Resurgence rotations (Varzia Dax).
-   - Computes effective vault dates ($\max(\text{Original Vault Date}, \text{Latest Resurgence End Date})$) to prevent mislabeling recently unvaulted frames as long-vaulted.
+   - Computes effective vault dates: Original Vault Date and Latest Resurgence End Date to prevent mislabeling recently unvaulted frames as long-vaulted.
 
 4. **Multi-Agent LangGraph Pipeline ([`agents/graph.py`](agents/graph.py))**:
    - **Trend Node ([`agents/trend_node.py`](agents/trend_node.py))**: Linear regression over 90-day price history with scale-independent thresholding ($\pm 10\%$).
