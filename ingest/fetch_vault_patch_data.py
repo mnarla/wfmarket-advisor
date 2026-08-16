@@ -9,6 +9,11 @@ from typing import Dict, Any, List, Optional
 logger = logging.getLogger(__name__)
 
 WARFRAMES_JSON_URL = "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Warframes.json"
+WEAPON_JSON_URLS = [
+    "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Primary.json",
+    "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Secondary.json",
+    "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Melee.json",
+]
 PATCHLOGS_JSON_URL = "https://raw.githubusercontent.com/WFCD/warframe-patchlogs/master/data/patchlogs.json"
 VAULT_TRADER_URL = "https://api.warframestat.us/pc/vaultTrader"
 DB_PATH = "db/wfm.db"
@@ -17,19 +22,20 @@ WATCHLIST_PATH = "config/watchlist.json"
 
 def fetch_warframe_vault_patch_data() -> Dict[str, Any]:
     """
-    GETs the WFCD Warframes.json dataset and returns a dict keyed by frame name
-    (e.g. 'Saryn Prime') for O(1) lookup. Each value contains:
+    GETs the WFCD Warframes.json and weapon (Primary/Secondary/Melee) JSON datasets
+    and returns a unified dict keyed by item name (e.g. 'Saryn Prime', 'Soma Prime')
+    for O(1) lookup. Each value contains:
       - vaulted: bool
       - vaultDate: str | None
       - estimatedVaultDate: str | None
     """
+    data = {}
+
+    # Load warframes
     logger.info(f"Fetching WFCD Warframes dataset from {WARFRAMES_JSON_URL}...")
     response = requests.get(WARFRAMES_JSON_URL, timeout=30)
     response.raise_for_status()
-    raw = response.json()
-
-    data = {}
-    for entry in raw:
+    for entry in response.json():
         name = entry.get("name", "").strip()
         if not name:
             continue
@@ -38,8 +44,31 @@ def fetch_warframe_vault_patch_data() -> Dict[str, Any]:
             "vaultDate": entry.get("vaultDate"),
             "estimatedVaultDate": entry.get("estimatedVaultDate"),
         }
-
     logger.info(f"Loaded {len(data)} Warframe entries from WFCD dataset.")
+
+    # Load Prime weapons (Primary, Secondary, Melee)
+    weapon_count = 0
+    for weapon_url in WEAPON_JSON_URLS:
+        try:
+            resp = requests.get(weapon_url, timeout=30)
+            resp.raise_for_status()
+            for entry in resp.json():
+                if not entry.get("isPrime"):
+                    continue
+                name = entry.get("name", "").strip()
+                if not name:
+                    continue
+                # Only add if has any vault-relevant data
+                data[name] = {
+                    "vaulted": entry.get("vaulted", False),
+                    "vaultDate": entry.get("vaultDate"),
+                    "estimatedVaultDate": entry.get("estimatedVaultDate"),
+                }
+                weapon_count += 1
+        except Exception as e:
+            logger.warning(f"Failed to fetch weapon vault data from {weapon_url}: {e}")
+    logger.info(f"Loaded {weapon_count} Prime weapon entries from WFCD dataset.")
+
     return data
 
 
