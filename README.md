@@ -2,6 +2,14 @@
 
 An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Market** built using **LangGraph**, **SQLite**, and **Gemini / LLM synthesis**.
 
+> **Disclaimer**: These outputs are not guaranteed financial predictions. They are data-driven recommendations synthesized from statistical price trends, relic vault supply cycles, and game patch balance notes to help inform your trading decisions on Warframe Market.
+
+---
+
+## Demo
+
+![WFM Sell-Timing Advisor Demo](demo.gif)
+
 ---
 
 ## Architecture & Capabilities
