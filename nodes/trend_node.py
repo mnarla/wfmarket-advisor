@@ -1,5 +1,5 @@
 """
-agents/trend_node.py — Trend signal node for the LangGraph sell-timing pipeline.
+nodes/trend_node.py — Trend signal node for the LangGraph sell-timing pipeline.
 
 WHY THIS NODE EXISTS:
 Raw price history is noisy day-to-day. This node fits a simple trend line over

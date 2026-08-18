@@ -12,7 +12,7 @@ from ingest.fetch_vault_patch_data import (
     fetch_live_patchlogs,
     insert_patchlogs,
 )
-from agents.graph import create_advisor_graph
+from nodes.graph import create_advisor_graph
 
 logger = logging.getLogger(__name__)
 

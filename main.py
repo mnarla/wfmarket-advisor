@@ -17,7 +17,7 @@ for logger_name in (
     "google.genai",
     "urllib3",
     "ingest",
-    "agents",
+    "nodes",
 ):
     logging.getLogger(logger_name).setLevel(logging.WARNING)
 

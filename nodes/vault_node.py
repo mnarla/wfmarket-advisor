@@ -1,5 +1,5 @@
 """
-agents/vault_node.py — Vault & Prime Resurgence signal node for the LangGraph sell-timing pipeline.
+nodes/vault_node.py — Vault & Prime Resurgence signal node for the LangGraph sell-timing pipeline.
 
 WHY THIS NODE EXISTS:
 Vaulting removes an item's relics from the drop tables, which typically causes

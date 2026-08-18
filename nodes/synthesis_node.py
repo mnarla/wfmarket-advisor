@@ -1,5 +1,5 @@
 """
-agents/synthesis_node.py — Synthesis & decision node for the LangGraph sell-timing pipeline.
+nodes/synthesis_node.py — Synthesis & decision node for the LangGraph sell-timing pipeline.
 
 WHY THIS NODE EXISTS:
 The trend, vault, and patch nodes each produce an independent signal about an item.
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 from dotenv import load_dotenv
-from agents.state import AgentState
+from nodes.state import AgentState
 
 load_dotenv()
 
@@ -352,9 +352,9 @@ def synthesis_node(state: AgentState) -> AgentState:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    from agents.trend_node import compute_trend_signal
-    from agents.vault_node import compute_vault_signal
-    from agents.patch_node import compute_patch_signal
+    from nodes.trend_node import compute_trend_signal
+    from nodes.vault_node import compute_vault_signal
+    from nodes.patch_node import compute_patch_signal
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row

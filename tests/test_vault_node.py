@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timezone, timedelta
-from agents.vault_node import compute_vault_signal
+from nodes.vault_node import compute_vault_signal
 
 
 def test_rhino_prime_resurgence_recently_vaulted():

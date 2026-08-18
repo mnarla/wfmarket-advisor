@@ -1,5 +1,5 @@
 """
-agents/patch_node.py — Patch-context reasoning node for the LangGraph sell-timing pipeline.
+nodes/patch_node.py — Patch-context reasoning node for the LangGraph sell-timing pipeline.
 
 WHY THIS NODE EXISTS:
 Price trends alone don't explain WHY something is moving — a rising price could be

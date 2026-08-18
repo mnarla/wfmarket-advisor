@@ -10,7 +10,7 @@ import sqlite3
 import logging
 from typing import Dict, Any, List
 
-from agents.graph import create_advisor_graph
+from nodes.graph import create_advisor_graph
 
 DB_PATH = "db/wfm.db"
 

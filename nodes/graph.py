@@ -1,9 +1,9 @@
 from langgraph.graph import StateGraph, END
-from agents.state import AgentState
-from agents.trend_node import trend_node
-from agents.vault_node import vault_node
-from agents.patch_node import patch_node
-from agents.synthesis_node import synthesis_node
+from nodes.state import AgentState
+from nodes.trend_node import trend_node
+from nodes.vault_node import vault_node
+from nodes.patch_node import patch_node
+from nodes.synthesis_node import synthesis_node
 
 def create_advisor_graph():
     """

@@ -30,11 +30,11 @@ An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Mark
    - Integrates live Warframe WorldState API (`vaultTrader`) to track active Prime Resurgence rotations (Varzia Dax).
    - Computes effective vault dates: Original Vault Date and Latest Resurgence End Date to prevent mislabeling recently unvaulted frames as long-vaulted.
 
-4. **Multi-Node LangGraph Pipeline ([`agents/graph.py`](agents/graph.py))**:
-   - **Trend Node ([`agents/trend_node.py`](agents/trend_node.py))**: Linear regression over 90-day price history with scale-independent thresholding ($\pm 10\%$).
-   - **Vault Node ([`agents/vault_node.py`](agents/vault_node.py))**: Calendar-math reasoning for vaulting and resurgence states (`recently_vaulted`, `vaulting_soon`, `long_vaulted`, `not_vaulted`).
-   - **Patch Node ([`agents/patch_node.py`](agents/patch_node.py))**: LLM semantic filter discerning genuine balance changes (buffs/nerfs) from noise/bugfixes.
-   - **Synthesis Node ([`agents/synthesis_node.py`](agents/synthesis_node.py))**: Weighs conflicting signals and outputs final `SELL` / `HOLD` recommendation, confidence, primary driver, and plain-English justification.
+4. **Multi-Node LangGraph Pipeline ([`nodes/graph.py`](nodes/graph.py))**:
+   - **Trend Node ([`nodes/trend_node.py`](nodes/trend_node.py))**: Linear regression over 90-day price history with scale-independent thresholding ($\pm 10\%$).
+   - **Vault Node ([`nodes/vault_node.py`](nodes/vault_node.py))**: Calendar-math reasoning for vaulting and resurgence states (`recently_vaulted`, `vaulting_soon`, `long_vaulted`, `not_vaulted`).
+   - **Patch Node ([`nodes/patch_node.py`](nodes/patch_node.py))**: LLM semantic filter discerning genuine balance changes (buffs/nerfs) from noise/bugfixes.
+   - **Synthesis Node ([`nodes/synthesis_node.py`](nodes/synthesis_node.py))**: Weighs conflicting signals and outputs final `SELL` / `HOLD` recommendation, confidence, primary driver, and plain-English justification.
 
 ---
 

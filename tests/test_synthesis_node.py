@@ -1,5 +1,5 @@
 import pytest
-from agents.synthesis_node import build_synthesis_prompt, call_llm_for_synthesis
+from nodes.synthesis_node import build_synthesis_prompt, call_llm_for_synthesis
 
 
 def test_patch_buff_overrides_negative_trend():
