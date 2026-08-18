@@ -242,14 +242,14 @@ def compute_patch_signal(frame_name: str, conn: sqlite3.Connection) -> Dict[str,
 
     patchlogs = get_recent_patchlogs(frame_name, conn)
 
-    print(f"\n[DEBUG] Frame: {frame_name}")
-    print(f"[DEBUG] Total patchlogs in DB: {total_in_db}")
-    print(f"[DEBUG] Patchlogs within 90-day window: {len(patchlogs)}")
+    logger.debug(f"Frame: {frame_name}")
+    logger.debug(f"Total patchlogs in DB: {total_in_db}")
+    logger.debug(f"Patchlogs within 90-day window: {len(patchlogs)}")
     if patchlogs:
         for p in patchlogs:
-            print(f"  - Included patch: '{p.get('patch_name')}' | Date: {p.get('patch_date')}")
+            logger.debug(f"  - Included patch: '{p.get('patch_name')}' | Date: {p.get('patch_date')}")
     else:
-        print("  - No patches within 90-day window.")
+        logger.debug("  - No patches within 90-day window.")
 
     if not patchlogs:
         return {

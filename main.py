@@ -1,10 +1,25 @@
 import os
 import sys
 import argparse
+import logging
 from dotenv import load_dotenv
 
 from ingest.build_db import build_database
 from ingest.cache_manager import get_recommendation
+
+# Suppress verbose INFO/DEBUG logs from libraries and internal modules
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+for logger_name in (
+    "httpx",
+    "httpcore",
+    "google_genai",
+    "google",
+    "google.genai",
+    "urllib3",
+    "ingest",
+    "agents",
+):
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Load environment variables
 load_dotenv()

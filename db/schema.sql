@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
     FOREIGN KEY(item_id) REFERENCES items(item_id)
 );
 
--- Table for tracking cache freshness per data type for on-demand query architecture
+-- Table for tracking when each cache was last updated to determine if we need to refresh the cache
 CREATE TABLE IF NOT EXISTS cache_metadata (
     slug TEXT PRIMARY KEY,
     price_last_updated TIMESTAMP,
