@@ -8,7 +8,7 @@ An on-demand, multi-signal sell/hold recommendation pipeline for **Warframe Mark
 
 ## Demo
 
-![WFM Sell-Timing Advisor Demo](demo.gif)
+![WFM Sell-Timing Advisor Demo](assets/demo.gif)
 
 ---
 
