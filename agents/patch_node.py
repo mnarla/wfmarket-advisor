@@ -53,20 +53,47 @@ def get_recent_patchlogs(frame_name: str, conn: sqlite3.Connection, days: int = 
     return [dict(row) for row in cur.fetchall()]
 
 
+def _extract_relevant_patch_lines(text: Optional[str], frame_name: str) -> str:
+    """Extracts bullet points and lines containing the frame or base name to avoid token bloat."""
+    if not text:
+        return ""
+    base_name = frame_name.replace(" Prime", "").strip().lower()
+    frame_lower = frame_name.lower()
+    
+    matched = []
+    for line in text.split("\n"):
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+        line_lower = line_clean.lower()
+        if frame_lower in line_lower or base_name in line_lower:
+            matched.append(line_clean)
+            
+    if matched:
+        return "\n".join(matched)
+    return text[:500] if len(text) > 500 else text
+
+
 def build_patch_context_prompt(frame_name: str, patchlogs: List[Dict[str, Any]]) -> str:
     """
-    Constructs the LLM prompt for patch-context analysis. Kept as its own function
-    so the prompt text is easy to iterate on and review separately from API plumbing.
+    Constructs the LLM prompt for patch-context analysis. Extracts only relevant
+    lines mentioning the item to keep prompt concise and within token budgets.
     """
     patch_entries = []
     for i, p in enumerate(patchlogs, 1):
         entry_parts = [f"Patch #{i}: {p['patch_name']} ({p['patch_date']})"]
-        if p.get("additions"):
-            entry_parts.append(f"  Additions: {p['additions']}")
-        if p.get("changes"):
-            entry_parts.append(f"  Changes: {p['changes']}")
-        if p.get("fixes"):
-            entry_parts.append(f"  Fixes: {p['fixes']}")
+        
+        adds = _extract_relevant_patch_lines(p.get("additions"), frame_name)
+        chgs = _extract_relevant_patch_lines(p.get("changes"), frame_name)
+        fixs = _extract_relevant_patch_lines(p.get("fixes"), frame_name)
+        
+        if adds:
+            entry_parts.append(f"  Additions: {adds}")
+        if chgs:
+            entry_parts.append(f"  Changes: {chgs}")
+        if fixs:
+            entry_parts.append(f"  Fixes: {fixs}")
+            
         patch_entries.append("\n".join(entry_parts))
 
     patches_text = "\n\n".join(patch_entries) if patch_entries else "(No patch entries found)"
@@ -173,11 +200,14 @@ def call_llm_for_patch_analysis(prompt: str) -> Dict[str, Any]:
     # If Gemini API Key is valid, try using the official google-genai client
     if api_key and api_key != "your_gemini_api_key_here":
         from google import genai
+        from google.genai import types
         try:
             client = genai.Client(api_key=api_key)
+            config = types.GenerateContentConfig(temperature=0.0)
             response = client.models.generate_content(
                 model="gemini-3.5-flash-lite",
                 contents=prompt,
+                config=config,
             )
             raw_text = response.text.strip()
         except Exception as e:

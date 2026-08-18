@@ -61,6 +61,7 @@ Raw Data:
 - Vault Status Signal: {vault_signal.get('signal', 'unknown')}
 - Days Since Vaulted: {vault_signal.get('days_since_vaulted')}
 - Days Until Vault: {vault_signal.get('days_until_vault')}
+- Is Resurgence Active: {vault_signal.get('is_resurgence_active', False)}
 
 SIGNAL 3: PATCH & BALANCE NOTES (Semantic Context)
 Summary: {patch_summary}
@@ -69,12 +70,34 @@ Raw Data:
 - Patch Name: {patch_signal.get('patch_name')}
 - Expected Market Impact: {patch_signal.get('expected_impact', 'none')}
 
-INSTRUCTIONS:
-1. Ground your decision ONLY in the three provided signals. Do NOT invent outside knowledge about Warframe drop rates, weapon meta, or market sentiment.
-2. Apply a CONSERVATIVE bias: Default to "HOLD" unless at least one signal gives a clear, strong, and well-supported reason to "SELL" (e.g. price is rising sharply near a peak, or imminent vaulting creates a prime selling window).
-3. CRITICAL RULE FOR PATCH SIGNAL: If `relevant_patch_found` is true BUT `expected_impact` is "none" or "unclear", the patch signal represents an irrelevant change (e.g. minor bug fix). In this case, `patch` MUST NOT be selected as the `primary_driver`, and the patch signal should carry minimal to no weight compared to `trend` or `vault`.
-4. Select a single `primary_driver` from: "trend", "vault", "patch", "combined".
-5. Write 2-3 sentences of clear plain-English reasoning suitable for an end-user display. Avoid technical statistical terms like "R-squared" or "linear regression".
+DECISION HIERARCHY (Follow these rules strictly in sequential order):
+
+STEP 1 — PATCH IMPACT (Highest Priority):
+If Expected Market Impact is NOT "none" (i.e. "increase", "decrease", or "unclear" from a confirmed gameplay buff, nerf, or rework):
+- "increase" (Buff) -> Recommend SELL (demand spike creates prime selling window). Primary driver: "patch".
+- "decrease" (Nerf) or "unclear" (Rework) -> Recommend HOLD (avoid selling at depressed prices or wait for meta to settle). Primary driver: "patch".
+- STOP here and DO NOT evaluate trend or vault status if a valid patch impact is found.
+
+STEP 2 — TREND CONFIDENCE (Checked only if Patch Impact is "none"):
+Check the statistical Fit Confidence (R²):
+- If R² > 0.45 (High/Trustworthy Trend Confidence):
+  * Positive Trend (% Change > 0 or Slope > 0) -> Recommend SELL (WFM price trends are scarcity-driven; an already-confirmed uptrend indicates mature gains, so lock in profit now rather than waiting). Primary driver: "trend".
+  * Negative Trend (% Change < 0 or Slope < 0) -> Recommend HOLD (do not sell into a confirmed decline). Primary driver: "trend".
+  * STOP here and DO NOT evaluate vault status if R² > 0.45.
+
+STEP 3 — VAULT STATUS (Checked only if Patch Impact is "none" AND Trend R² <= 0.45):
+When trend confidence is weak or noisy (R² <= 0.45), vault status is the deciding factor:
+- "recently_vaulted" -> Recommend HOLD (supply was recently cut off and market is still absorbing remaining inventory; hold for long-term appreciation). Primary driver: "vault".
+- "vaulting_soon" or "is_resurgence_active" -> Recommend HOLD or SELL based on relic timing. Primary driver: "vault".
+- "long_vaulted" -> Recommend HOLD (price has stabilized). Primary driver: "vault".
+
+STEP 4 — DEFAULT CONSERVATIVE FALLBACK:
+If Trend R² <= 0.45 AND Vault Status is "not_vaulted" / inconclusive -> Recommend HOLD. Primary driver: "combined".
+
+GENERAL RULES:
+1. Ground your decision ONLY in the three provided signals following the hierarchy above.
+2. Select a single `primary_driver` from: "trend", "vault", "patch", "combined".
+3. Write 2-3 sentences of clear plain-English reasoning suitable for an end-user display explaining the decision. Avoid technical statistical jargon like "R-squared" or "linear regression".
 
 Respond with ONLY valid JSON (no markdown fences, no text outside the JSON):
 {{
@@ -144,12 +167,15 @@ def call_llm_for_synthesis(prompt: str) -> Dict[str, Any]:
 
     if api_key and api_key != "your_gemini_api_key_here":
         from google import genai
+        from google.genai import types
 
         try:
             client = genai.Client(api_key=api_key)
+            config = types.GenerateContentConfig(temperature=0.0)
             response = client.models.generate_content(
                 model="gemini-3.5-flash-lite",
                 contents=prompt,
+                config=config,
             )
             raw_text = response.text.strip()
         except Exception as e:
